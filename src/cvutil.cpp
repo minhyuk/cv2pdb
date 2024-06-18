@@ -6,6 +6,12 @@
 
 #include "cvutil.h"
 
+/**
+ * Checks if the given codeview_type is a struct or class.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @return True if the codeview_type is a struct or class, otherwise false.
+ */
 bool isStruct(const codeview_type* cvtype)
 {
 	switch (cvtype->generic.id)
@@ -21,6 +27,12 @@ bool isStruct(const codeview_type* cvtype)
 	return false;
 }
 
+/**
+ * Checks if the given codeview_type is a class.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @return True if the codeview_type is a class, otherwise false.
+ */
 bool isClass(const codeview_type* cvtype)
 {
 	switch (cvtype->generic.id)
@@ -33,6 +45,12 @@ bool isClass(const codeview_type* cvtype)
 	return false;
 }
 
+/**
+ * Retrieves the property of a struct or class from a given codeview_type.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @return The property value of the struct or class, or 0 if the type is not recognized.
+ */
 int getStructProperty(const codeview_type* cvtype)
 {
 	switch (cvtype->generic.id)
@@ -50,6 +68,12 @@ int getStructProperty(const codeview_type* cvtype)
 	return 0;
 }
 
+/**
+ * Retrieves the field list of a struct or class from a given codeview_type.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @return The field list value of the struct or class, or 0 if the type is not recognized.
+ */
 int getStructFieldlist(const codeview_type* cvtype)
 {
 	switch (cvtype->generic.id)
@@ -67,6 +91,13 @@ int getStructFieldlist(const codeview_type* cvtype)
 	return 0;
 }
 
+/**
+ * Retrieves the name of a struct or class from a given codeview_type.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @param cstr Reference to a boolean that will be set to true if the name is a C-style string.
+ * @return Pointer to the name of the struct or class, or 0 if the type is not recognized.
+ */
 const BYTE* getStructName(const codeview_type* cvtype, bool &cstr)
 {
 	int value, leaf_len;
@@ -91,6 +122,14 @@ const BYTE* getStructName(const codeview_type* cvtype, bool &cstr)
 	return 0;
 }
 
+/**
+ * Compares the name of a struct or class with a given name.
+ *
+ * @param cvtype Pointer to the codeview_type.
+ * @param name Pointer to the name to compare.
+ * @param cstr Boolean indicating if the provided name is a C-style string.
+ * @return True if the names are equal, false otherwise.
+ */
 bool cmpStructName(const codeview_type* cvtype, const BYTE* name, bool cstr)
 {
 	bool cstr2;
@@ -100,6 +139,14 @@ bool cmpStructName(const codeview_type* cvtype, const BYTE* name, bool cstr)
 	return dstrcmp(name, cstr, name2, cstr2);
 }
 
+/**
+ * Checks if the given codeview_type is a complete struct with the specified name.
+ *
+ * @param type Pointer to the codeview_type.
+ * @param name Pointer to the name to compare.
+ * @param cstr Boolean indicating if the provided name is a C-style string.
+ * @return True if the type is a complete struct with the specified name, otherwise false.
+ */
 bool isCompleteStruct(const codeview_type* type, const BYTE* name, bool cstr)
 {
 	return isStruct(type) 
@@ -107,6 +154,13 @@ bool isCompleteStruct(const codeview_type* type, const BYTE* name, bool cstr)
 		&& cmpStructName(type, name, cstr);
 }
 
+/**
+ * Processes a numeric leaf from the given leaf data pointer and extracts the value.
+ *
+ * @param value Pointer to an integer where the extracted value will be stored.
+ * @param leaf Pointer to the leaf data to be processed.
+ * @return The length of the processed leaf in bytes, or 0 if there is an error.
+ */
 int numeric_leaf(int* value, const void* leaf)
 {
 	unsigned short int type = *(const unsigned short int*) leaf;
@@ -179,6 +233,13 @@ int numeric_leaf(int* value, const void* leaf)
 	return length;
 }
 
+/**
+ * Writes a numeric value into the specified leaf buffer, considering the value's range.
+ *
+ * @param value The integer value to be written.
+ * @param leaf Pointer to the leaf buffer where the value will be written.
+ * @return The length of the written leaf in bytes.
+ */
 int write_numeric_leaf(int value, void* leaf)
 {
 	if(value >= 0 && value < LF_NUMERIC)
