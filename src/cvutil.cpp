@@ -6,9 +6,9 @@
 
 #include "cvutil.h"
 
-bool isStruct(const codeview_type* cvtype)
+bool isStruct(const codeview_type* typeInfo)
 {
-	switch (cvtype->generic.id)
+	switch (typeInfo->generic.id)
 	{
 	case LF_STRUCTURE_V1:
 	case LF_CLASS_V1:
@@ -21,9 +21,9 @@ bool isStruct(const codeview_type* cvtype)
 	return false;
 }
 
-bool isClass(const codeview_type* cvtype)
+bool isClass(const codeview_type* typeInfo)
 {
-	switch (cvtype->generic.id)
+	switch (typeInfo->generic.id)
 	{
 	case LF_CLASS_V1:
 	case LF_CLASS_V2:
@@ -33,108 +33,107 @@ bool isClass(const codeview_type* cvtype)
 	return false;
 }
 
-int getStructProperty(const codeview_type* cvtype)
+int getStructProperty(const codeview_type* typeInfo)
 {
-	switch (cvtype->generic.id)
+    switch (typeInfo->generic.id)
+    {
+        case LF_STRUCTURE_V1:
+        case LF_CLASS_V1:
+            return typeInfo->struct_v1.property;
+        case LF_STRUCTURE_V2:
+        case LF_CLASS_V2:
+            return typeInfo->struct_v2.property;
+        case LF_STRUCTURE_V3:
+        case LF_CLASS_V3:
+            return typeInfo->struct_v3.property;
+    }
+    return 0;
+}
+
+int getStructFieldlist(const codeview_type* typeInfo)
+{
+	switch (typeInfo->generic.id)
 	{
 	case LF_STRUCTURE_V1:
 	case LF_CLASS_V1:
-		return cvtype->struct_v1.property;
+		return typeInfo->struct_v1.fieldlist;
 	case LF_STRUCTURE_V2:
 	case LF_CLASS_V2:
-		return cvtype->struct_v2.property;
+		return typeInfo->struct_v2.fieldlist;
 	case LF_STRUCTURE_V3:
 	case LF_CLASS_V3:
-		return cvtype->struct_v3.property;
+		return typeInfo->struct_v3.fieldlist;
 	}
 	return 0;
 }
 
-int getStructFieldlist(const codeview_type* cvtype)
+const BYTE* getTypeInfo(const codeview_type* typeInfo, bool &isCString)
 {
-	switch (cvtype->generic.id)
+	int leafValue, leafLength;
+	switch (typeInfo->generic.id)
 	{
 	case LF_STRUCTURE_V1:
 	case LF_CLASS_V1:
-		return cvtype->struct_v1.fieldlist;
+		isCString = false;
+		leafLength = numeric_leaf(&leafValue, &typeInfo->struct_v1.structlen);
+		return (const BYTE*) &typeInfo->struct_v1.structlen + leafLength;
 	case LF_STRUCTURE_V2:
 	case LF_CLASS_V2:
-		return cvtype->struct_v2.fieldlist;
+		isCString = false;
+		leafLength = numeric_leaf(&leafValue, &typeInfo->struct_v2.structlen);
+		return (const BYTE*) &typeInfo->struct_v2.structlen + leafLength;
 	case LF_STRUCTURE_V3:
 	case LF_CLASS_V3:
-		return cvtype->struct_v3.fieldlist;
+		isCString = true;
+		leafLength = numeric_leaf(&leafValue, &typeInfo->struct_v3.structlen);
+		return (const BYTE*) &typeInfo->struct_v3.structlen + leafLength;
 	}
 	return 0;
 }
 
-const BYTE* getStructName(const codeview_type* cvtype, bool &cstr)
+bool cmpStructName(const codeview_type* cvtype, const BYTE* name, bool isCString)
 {
-	int value, leaf_len;
-	switch (cvtype->generic.id)
-	{
-	case LF_STRUCTURE_V1:
-	case LF_CLASS_V1:
-		cstr = false;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v1.structlen);
-		return (const BYTE*) &cvtype->struct_v1.structlen + leaf_len;
-	case LF_STRUCTURE_V2:
-	case LF_CLASS_V2:
-		cstr = false;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v2.structlen);
-		return (const BYTE*) &cvtype->struct_v2.structlen + leaf_len;
-	case LF_STRUCTURE_V3:
-	case LF_CLASS_V3:
-		cstr = true;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v3.structlen);
-		return (const BYTE*) &cvtype->struct_v3.structlen + leaf_len;
-	}
-	return 0;
+    const BYTE* name2 = getStructName(cvtype, isCString);
+    if(!name || !name2)
+        return name == name2;
+    return dstrcmp(name, isCString, name2, isCString);
 }
 
-bool cmpStructName(const codeview_type* cvtype, const BYTE* name, bool cstr)
-{
-	bool cstr2;
-	const BYTE* name2 = getStructName(cvtype, cstr2);
-	if(!name || !name2)
-		return name == name2;
-	return dstrcmp(name, cstr, name2, cstr2);
-}
-
-bool isCompleteStruct(const codeview_type* type, const BYTE* name, bool cstr)
+bool isCompleteStruct(const codeview_type* type, const BYTE* name, bool isCStringType)
 {
 	return isStruct(type) 
 		&& !(getStructProperty(type) & kPropIncomplete)
-		&& cmpStructName(type, name, cstr);
+		&& cmpStructName(type, name, isCStringType);
 }
 
-int numeric_leaf(int* value, const void* leaf)
+int numeric_leaf(int* dataValue, const void* leaf)
 {
-	unsigned short int type = *(const unsigned short int*) leaf;
+	unsigned short int dataType = *(const unsigned short int*) leaf;
 	leaf = (const unsigned short int*) leaf + 1;
 	int length = 2;
 
-	*value = 0;
-	switch (type)
+	*dataValue = 0;
+	switch (dataType)
 	{
 	case LF_CHAR:
 		length += 1;
-		*value = *(const char*)leaf;
+		*dataValue = *(const char*)leaf;
 		break;
 
 	case LF_SHORT:
 		length += 2;
-		*value = *(const short*)leaf;
+		*dataValue = *(const short*)leaf;
 		break;
 
 	case LF_USHORT:
 		length += 2;
-		*value = *(const unsigned short*)leaf;
+		*dataValue = *(const unsigned short*)leaf;
 		break;
 
 	case LF_LONG:
 	case LF_ULONG:
 		length += 4;
-		*value = *(const int*)leaf;
+		*dataValue = *(const int*)leaf;
 		break;
 
 	case LF_COMPLEX64:
@@ -168,8 +167,8 @@ int numeric_leaf(int* value, const void* leaf)
 		break;
 
 	default:
-		if (type < LF_NUMERIC)
-			*value = type;
+		if (dataType < LF_NUMERIC)
+			*dataValue = dataType;
 		else
 		{
 			length = 0; // error!
@@ -179,35 +178,35 @@ int numeric_leaf(int* value, const void* leaf)
 	return length;
 }
 
-int write_numeric_leaf(int value, void* leaf)
+int write_numeric_leaf(int inputNumericValue, void* dataLeafPointer)
 {
-	if(value >= 0 && value < LF_NUMERIC)
+	if(inputNumericValue >= 0 && inputNumericValue < LF_NUMERIC)
 	{
-		*(unsigned short int*) leaf = (unsigned short) value;
+		*(unsigned short int*) dataLeafPointer = (unsigned short) inputNumericValue;
 		return 2;
 	}
-	unsigned short int* type = (unsigned short int*) leaf;
-	leaf = type + 1;
-	if (value >= -128 && value <= 127)
+	unsigned short int* dataType = (unsigned short int*) dataLeafPointer;
+	dataLeafPointer = dataType + 1;
+	if (inputNumericValue >= -128 && inputNumericValue <= 127)
 	{
-		*type = LF_CHAR;
-		*(char*) leaf = (char)value;
+		*dataType = LF_CHAR;
+		*(char*) dataLeafPointer = (char)inputNumericValue;
 		return 3;
 	}
-	if (value >= -32768 && value <= 32767)
+	if (inputNumericValue >= -32768 && inputNumericValue <= 32767)
 	{
-		*type = LF_SHORT;
-		*(short*) leaf = (short)value;
+		*dataType = LF_SHORT;
+		*(short*) dataLeafPointer = (short)inputNumericValue;
 		return 4;
 	}
-	if (value >= 0 && value <= 65535)
+	if (inputNumericValue >= 0 && inputNumericValue <= 65535)
 	{
-		*type = LF_USHORT;
-		*(unsigned short*) leaf = (unsigned short)value;
+		*dataType = LF_USHORT;
+		*(unsigned short*) dataLeafPointer = (unsigned short)inputNumericValue;
 		return 4;
 	}
-	*type = LF_LONG;
-	*(long*) leaf = (long)value;
+	*dataType = LF_LONG;
+	*(long*) dataLeafPointer = (long)inputNumericValue;
 	return 6;
 }
 
