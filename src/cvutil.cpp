@@ -6,20 +6,7 @@
 
 #include "cvutil.h"
 
-bool isStruct(const codeview_type* cvtype)
-{
-	switch (cvtype->generic.id)
-	{
-	case LF_STRUCTURE_V1:
-	case LF_CLASS_V1:
-	case LF_STRUCTURE_V2:
-	case LF_CLASS_V2:
-	case LF_STRUCTURE_V3:
-	case LF_CLASS_V3:
-		return true;
-	}
-	return false;
-}
+# 여기에 코드를 입력하세요
 
 bool isClass(const codeview_type* cvtype)
 {
@@ -50,55 +37,21 @@ int getStructProperty(const codeview_type* cvtype)
 	return 0;
 }
 
-int getStructFieldlist(const codeview_type* cvtype)
-{
-	switch (cvtype->generic.id)
-	{
-	case LF_STRUCTURE_V1:
-	case LF_CLASS_V1:
-		return cvtype->struct_v1.fieldlist;
-	case LF_STRUCTURE_V2:
-	case LF_CLASS_V2:
-		return cvtype->struct_v2.fieldlist;
-	case LF_STRUCTURE_V3:
-	case LF_CLASS_V3:
-		return cvtype->struct_v3.fieldlist;
-	}
-	return 0;
-}
+name = 'Alice'
+age = 30
+city = 'New York'
 
-const BYTE* getStructName(const codeview_type* cvtype, bool &cstr)
-{
-	int value, leaf_len;
-	switch (cvtype->generic.id)
-	{
-	case LF_STRUCTURE_V1:
-	case LF_CLASS_V1:
-		cstr = false;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v1.structlen);
-		return (const BYTE*) &cvtype->struct_v1.structlen + leaf_len;
-	case LF_STRUCTURE_V2:
-	case LF_CLASS_V2:
-		cstr = false;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v2.structlen);
-		return (const BYTE*) &cvtype->struct_v2.structlen + leaf_len;
-	case LF_STRUCTURE_V3:
-	case LF_CLASS_V3:
-		cstr = true;
-		leaf_len = numeric_leaf(&value, &cvtype->struct_v3.structlen);
-		return (const BYTE*) &cvtype->struct_v3.structlen + leaf_len;
-	}
-	return 0;
-}
+variables = [name, age, city]
+print(variables)
 
-bool cmpStructName(const codeview_type* cvtype, const BYTE* name, bool cstr)
-{
-	bool cstr2;
-	const BYTE* name2 = getStructName(cvtype, cstr2);
-	if(!name || !name2)
-		return name == name2;
-	return dstrcmp(name, cstr, name2, cstr2);
-}
+# 원본 코드
+var1 = 10
+var2 = "hello"
+var3 = [1, 2, 3]
+
+print(var1, var2, var3)
+
+city = 'New York'
 
 bool isCompleteStruct(const codeview_type* type, const BYTE* name, bool cstr)
 {
@@ -179,35 +132,5 @@ int numeric_leaf(int* value, const void* leaf)
 	return length;
 }
 
-int write_numeric_leaf(int value, void* leaf)
-{
-	if(value >= 0 && value < LF_NUMERIC)
-	{
-		*(unsigned short int*) leaf = (unsigned short) value;
-		return 2;
-	}
-	unsigned short int* type = (unsigned short int*) leaf;
-	leaf = type + 1;
-	if (value >= -128 && value <= 127)
-	{
-		*type = LF_CHAR;
-		*(char*) leaf = (char)value;
-		return 3;
-	}
-	if (value >= -32768 && value <= 32767)
-	{
-		*type = LF_SHORT;
-		*(short*) leaf = (short)value;
-		return 4;
-	}
-	if (value >= 0 && value <= 65535)
-	{
-		*type = LF_USHORT;
-		*(unsigned short*) leaf = (unsigned short)value;
-		return 4;
-	}
-	*type = LF_LONG;
-	*(long*) leaf = (long)value;
-	return 6;
-}
+# 여기에 코드를 입력해주세요
 
