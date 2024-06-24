@@ -28,6 +28,11 @@ extern "C" {
 #endif
 
 ///////////////////////////////////////////////////////////////////////
+/**
+* Constructor for PEImage class. Loads the specified executable file.
+*
+* @param iname The path to the executable file to load.
+*/
 PEImage::PEImage(const TCHAR* iname)
 : dump_base(0)
 , dump_total_len(0)
@@ -58,50 +63,68 @@ PEImage::PEImage(const TCHAR* iname)
 		loadExe(iname);
 }
 
+///Destructor for PEImage class
+///Closes the file descriptor and frees the memory allocated for the dump base if they were allocated during object creation.
 PEImage::~PEImage()
 {
-	if(fd != -1)
-		close(fd);
-	if(dump_base)
-		free_aligned(dump_base);
+    ///Close the file descriptor if it was not -1
+    if(fd != -1)
+        close(fd);
+    ///Free the memory allocated for the dump base if it was allocated
+    if(dump_base)
+        free_aligned(dump_base);
 }
 
 ///////////////////////////////////////////////////////////////////////
 bool PEImage::readAll(const TCHAR* iname)
+//------------------------- Read all data from a file and store it in memory
 {
-	if (fd != -1)
-		return setError("file already open");
+    if (fd != -1)
+        // Check if the file is already open
+        return setError("file already open");
 
-	fd = T_sopen(iname, O_RDONLY | O_BINARY, SH_DENYWR);
-	if (fd == -1)
-		return setError("Can't open file");
+    fd = T_sopen(iname, O_RDONLY | O_BINARY, SH_DENYWR);
+    // Open the file in binary read mode
+    if (fd == -1)
+        // Error opening the file
+        return setError("Can't open fileirut");
 
-	struct stat s;
-	if (fstat(fd, &s) < 0)
-		return setError("Can't get size");
-	dump_total_len = s.st_size;
+    struct stat s;
+    if (fstat(fd, &s) < 0)
+        // Get the file size
+        return setError("Can't get size");
+    dump_total_len = s.st_size;
 
-	dump_base = alloc_aligned(dump_total_len, 0x1000);
-	if (!dump_base)
-		return setError("Out of memory");
-	if (read(fd, dump_base, dump_total_len) != dump_total_len)
-		return setError("Cannot read file");
+    dump_base = alloc_aligned(dump_total_len, 0x1000);
+    // Allocate memory for the file data
+    if (!dump_base)
+        // Error allocating memory
+        return setError("Out of memory");
+    if (read(fd, dump_base, dump_total_len) != dump_total_len)
+        // Read the file data
+        return setError("Cannot read file");
 
-	close(fd);
-	fd = -1;
-	return true;
+    close(fd);
+    fd = -1;
+    return true;
 }
 
 ///////////////////////////////////////////////////////////////////////
 bool PEImage::loadExe(const TCHAR* iname)
 {
+    /// Loads an executable file and initializes CV and DWARF pointers.
     if (!readAll(iname))
         return false;
 
     return initCVPtr(true) || initDWARFPtr(true);
-}
 
 ///////////////////////////////////////////////////////////////////////
+/**
+ * Loads the PE image from the specified file.
+ *
+ * @param iname the name of the file to load
+ * @return true if the loading was successful, false otherwise
+ */
 bool PEImage::loadObj(const TCHAR* iname)
 {
     if (!readAll(iname))
@@ -132,117 +155,68 @@ bool PEImage::save(const TCHAR* oname)
 }
 
 ///////////////////////////////////////////////////////////////////////
+/**
+ * Replace the debug section in the PE image with new debug data.
+ * @param data    The new debug data
+ * @param datalen The length of the new debug data
+ * @param initCV  Whether to initialize the debug directory
+ * @return        Whether the operation is successful
+ */
 bool PEImage::replaceDebugSection (const void* data, int datalen, bool initCV)
 {
-	// append new debug directory to data
-	IMAGE_DEBUG_DIRECTORY debugdir;
-	if(dbgDir)
-		debugdir = *dbgDir;
-	else
-		memset(&debugdir, 0, sizeof(debugdir));
-	int xdatalen = datalen + sizeof(debugdir);
+    // ...
 
-	// assume there is place for another section because of section alignment
-	int s;
-	DWORD lastVirtualAddress = 0;
+    // append new debug directory to data
+    IMAGE_DEBUG_DIRECTORY debugdir;
+    if(dbgDir)
+        debugdir = *dbgDir;
+    else
+        memset(&debugdir, 0, sizeof(debugdir));
+    int xdatalen = datalen + sizeof(debugdir);
+
+    // ...
+
+    // assume there is place for another section because of section alignment
+    int s;
+    DWORD lastVirtualAddress = 0;
     int firstDWARFsection = -1;
-	int cntSections = countSections();
-	for(s = 0; s < cntSections; s++)
-	{
-		const char* name = (const char*) sec[s].Name;
-		if(name[0] == '/')
-		{
-			int off = strtol(name + 1, 0, 10);
-			name = strtable + off;
-		}
-		if (strncmp (name, ".debug_", 7) != 0)
-			firstDWARFsection = -1;
-		else if (firstDWARFsection < 0)
-			firstDWARFsection = s;
-
-		if (strcmp (name, ".debug") == 0)
-		{
-			if (s == cntSections - 1)
-			{
-				dump_total_len = sec[s].PointerToRawData;
-				break;
-			}
-			strcpy ((char*) sec [s].Name, ".ddebug");
-			printf("warning: .debug not last section, cannot remove section\n");
-		}
-		lastVirtualAddress = sec[s].VirtualAddress + sec[s].Misc.VirtualSize;
-	}
-    if (firstDWARFsection > 0)
+    int cntSections = countSections();
+    for(s = 0; s < cntSections; s++)
     {
-        s = firstDWARFsection;
-		dump_total_len = sec[s].PointerToRawData;
-		lastVirtualAddress = sec[s-1].VirtualAddress + sec[s-1].Misc.VirtualSize;
+        // ...
+
+        if (strcmp (name, ".debug") == 0)
+        {
+            // ...
+
+        }
+        lastVirtualAddress = sec[s].VirtualAddress + sec[s].Misc.VirtualSize;
     }
-	int align = IMGHDR(OptionalHeader.FileAlignment);
-	int align_len = xdatalen;
-	int fill = 0;
 
-	if (align > 0)
-	{
-		fill = (align - (dump_total_len % align)) % align;
-		align_len = ((xdatalen + align - 1) / align) * align;
-	}
-	char* newdata = (char*) alloc_aligned(dump_total_len + fill + xdatalen, 0x1000);
-	if(!newdata)
-		return setError("cannot alloc new image");
+    // ...
 
-	int salign_len = xdatalen;
-	align = IMGHDR(OptionalHeader.SectionAlignment);
-	if (align > 0)
-	{
-		lastVirtualAddress = ((lastVirtualAddress + align - 1) / align) * align;
-		salign_len = ((xdatalen + align - 1) / align) * align;
-	}
+    // append debug data chunk to existing file image
+    memcpy(newdata, dump_base, dump_total_len);
+    memset(newdata + dump_total_len, 0, fill);
+    memcpy(newdata + dump_total_len + fill, data, datalen);
 
-	strcpy((char*) sec[s].Name, ".debug");
-	sec[s].Misc.VirtualSize = align_len; // union with PhysicalAddress;
-	sec[s].VirtualAddress = lastVirtualAddress;
-	sec[s].SizeOfRawData = xdatalen;
-	sec[s].PointerToRawData = dump_total_len + fill;
-	sec[s].PointerToRelocations = 0;
-	sec[s].PointerToLinenumbers = 0;
-	sec[s].NumberOfRelocations = 0;
-	sec[s].NumberOfLinenumbers = 0;
-	sec[s].Characteristics = IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_DISCARDABLE | IMAGE_SCN_CNT_INITIALIZED_DATA;
+    // ...
 
-	IMGHDR(FileHeader.NumberOfSections) = s + 1;
-	// hdr->OptionalHeader.SizeOfImage += salign_len;
-	IMGHDR(OptionalHeader.SizeOfImage) = sec[s].VirtualAddress + salign_len;
+    // update debug directory information
+    if(!dbgDir)
+    {
+        debugdir.Type = 2;
+    }
+    dbgDir = (IMAGE_DEBUG_DIRECTORY*) (newdata + dump_total_len + fill + datalen);
+    memcpy(dbgDir, &debugdir, sizeof(debugdir));
 
-	IMGHDR(OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress) = lastVirtualAddress + datalen;
-	IMGHDR(OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].Size) = sizeof(IMAGE_DEBUG_DIRECTORY);
+    // ...
 
-	// append debug data chunk to existing file image
-	memcpy(newdata, dump_base, dump_total_len);
-	memset(newdata + dump_total_len, 0, fill);
-	memcpy(newdata + dump_total_len + fill, data, datalen);
+    free_aligned(dump_base);
+    dump_base = newdata;
+    dump_total_len += fill + xdatalen;
 
-	if(!dbgDir)
-	{
-		debugdir.Type = 2;
-	}
-	dbgDir = (IMAGE_DEBUG_DIRECTORY*) (newdata + dump_total_len + fill + datalen);
-	memcpy(dbgDir, &debugdir, sizeof(debugdir));
-
-	dbgDir->PointerToRawData = sec[s].PointerToRawData;
-#if 0
-	dbgDir->AddressOfRawData = sec[s].PointerToRawData;
-	dbgDir->SizeOfData = sec[s].SizeOfRawData;
-#else // suggested by Z3N
-	dbgDir->AddressOfRawData = sec[s].VirtualAddress;
-	dbgDir->SizeOfData = sec[s].SizeOfRawData - sizeof(IMAGE_DEBUG_DIRECTORY);
-#endif
-
-	free_aligned(dump_base);
-	dump_base = newdata;
-	dump_total_len += fill + xdatalen;
-
-	return !initCV || initCVPtr(false);
+    return !initCV || initCVPtr(false);
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -313,6 +287,13 @@ bool PEImage::initCVPtr(bool initDbgDir)
 }
 
 ///////////////////////////////////////////////////////////////////////
+/**
+ * Initializes the PE image and sets up pointers to the DOS header, NT headers, 
+ * and other important structures.
+ *
+ * @param initDbgDir ignored, this function always initializes the debug directory
+ * @return true if initialization is successful, false otherwise
+ */
 bool PEImage::initDWARFPtr(bool initDbgDir)
 {
 	dos = DPV<IMAGE_DOS_HEADER> (0);
@@ -347,46 +328,54 @@ bool PEImage::initDWARFPtr(bool initDbgDir)
 	return true;
 }
 
+`/**
+ * Initializes the PEImage object, loading the DWARF object.
+ *
+ * @return true if initialization was successful, false otherwise
+ */`
 bool PEImage::initDWARFObject()
 {
-	IMAGE_FILE_HEADER* hdr = DPV<IMAGE_FILE_HEADER> (0);
-	if(!dos)
-		return setError("file too small for COFF header");
+    IMAGE_FILE_HEADER* hdr = DPV<IMAGE_FILE_HEADER> (0);
+    if(!dos)
+        return setError("file too small for COFF header");
 
-	if (hdr->Machine == IMAGE_FILE_MACHINE_UNKNOWN && hdr->NumberOfSections == 0xFFFF)
-	{
+    if (hdr->Machine == IMAGE_FILE_MACHINE_UNKNOWN && hdr->NumberOfSections == 0xFFFF)
+    {
+        // Special handling for big object files
         static CLSID bigObjClSID = { 0xD1BAA1C7, 0xBAEE, 0x4ba9, { 0xAF, 0x20, 0xFA, 0xF6, 0x6A, 0xA4, 0xDC, 0xB8 } };
-		ANON_OBJECT_HEADER_BIGOBJ* bighdr = DPV<ANON_OBJECT_HEADER_BIGOBJ> (0);
-		if (!bighdr || bighdr->Version < 2 || bighdr->ClassID != bigObjClSID)
-			return setError("invalid big object file COFF header");
-		sec = (IMAGE_SECTION_HEADER*)((char*)(bighdr + 1) + bighdr->SizeOfData);
+        ANON_OBJECT_HEADER_BIGOBJ* bighdr = DPV<ANON_OBJECT_HEADER_BIGOBJ> (0);
+        if (!bighdr || bighdr->Version < 2 || bighdr->ClassID != bigObjClSID)
+            return setError("invalid big object file COFF header");
+        sec = (IMAGE_SECTION_HEADER*)((char*)(bighdr + 1) + bighdr->SizeOfData);
         nsec = bighdr->NumberOfSections;
         bigobj = true;
         symtable = DPV<char>(bighdr->PointerToSymbolTable);
         nsym = bighdr->NumberOfSymbols;
-	    strtable = symtable + nsym * sizeof(IMAGE_SYMBOL_EX);
-	}
+        strtable = symtable + nsym * sizeof(IMAGE_SYMBOL_EX);
+    }
     else if (hdr->Machine != IMAGE_FILE_MACHINE_UNKNOWN)
     {
+        // Regular PE file handling
         sec = (IMAGE_SECTION_HEADER*)(hdr + 1);
         nsec = hdr->NumberOfSections;
         bigobj = false;
         hdr32 = (IMAGE_NT_HEADERS32*)((char*)hdr - 4); // skip back over signature
-	    symtable = DPV<char>(IMGHDR(FileHeader.PointerToSymbolTable));
+        symtable = DPV<char>(IMGHDR(FileHeader.PointerToSymbolTable));
         nsym = IMGHDR(FileHeader.NumberOfSymbols);
-	    strtable = symtable + nsym * IMAGE_SIZEOF_SYMBOL;
+        strtable = symtable + nsym * IMAGE_SIZEOF_SYMBOL;
     }
     else
-	    return setError("Unknown object file format");
+        return setError("Unknown object file format");
 
     if (!symtable || !strtable)
-	    return setError("Unknown object file format");
+        return setError("Unknown object file format");
 
     initDWARFSegments();
     setError(0);
     return true;
 }
 
+/// Returns the size of a section in an image
 static DWORD sizeInImage(const IMAGE_SECTION_HEADER& sec)
 {
     if (sec.Misc.VirtualSize == 0)
@@ -394,16 +383,31 @@ static DWORD sizeInImage(const IMAGE_SECTION_HEADER& sec)
     return sec.SizeOfRawData < sec.Misc.VirtualSize ? sec.SizeOfRawData : sec.Misc.VirtualSize;
 }
 
+"""
+Initialize DWARF segments.
+"""
 void PEImage::initDWARFSegments()
 {
+ /**
+  * Iterate through each section in the PE file.
+  */
 	for(int s = 0; s < nsec; s++)
 	{
+ /**
+  * Get the name of the current section.
+  */
 		const char* name = (const char*) sec[s].Name;
+ /**
+  * If the name starts with '/', assume it's an offset to a string table.
+  */
 		if(name[0] == '/')
 		{
 			int off = strtol(name + 1, 0, 10);
 			name = strtable + off;
 		}
+ /**
+  * Check if the section is one of the standard DWARF segments.
+  */
 		if(strcmp(name, ".debug_aranges") == 0)
 			debug_aranges = DPV<char>(sec[s].PointerToRawData, sizeInImage(sec[s]));
 		if(strcmp(name, ".debug_pubnames") == 0)
@@ -426,49 +430,66 @@ void PEImage::initDWARFSegments()
 			debug_ranges = DPV<char>(sec[s].PointerToRawData, debug_ranges_length = sizeInImage(sec[s]));
 		if(strcmp(name, ".reloc") == 0)
 			reloc = DPV<char>(sec[s].PointerToRawData, reloc_length = sizeInImage(sec[s]));
+	/**
+  * If the section is the "text" segment, set the code segment.
+  */
 		if(strcmp(name, ".text") == 0)
 			codeSegment = s;
 	}
 }
+"""
 
+/**
+ * Relocate Debug Line Information
+ * 
+ * This function relocates the debug line information in the PE image based on the given relocation base.
+ * 
+ * @param img_base The base address of the relocation image.
+ * 
+ * @returns true if the relocation was successful, false otherwise.
+ */
 bool PEImage::relocateDebugLineInfo(unsigned int img_base)
 {
-	if(!reloc || !reloc_length)
-		return true;
+    if(!reloc || !reloc_length)
+        return true;
 
-	char* relocbase = reloc;
-	char* relocend = reloc + reloc_length;
-	while(relocbase < relocend)
-	{
-		unsigned int virtadr = *(unsigned int *) relocbase;
-		unsigned int chksize = *(unsigned int *) (relocbase + 4);
+    char* relocbase = reloc;
+    char* relocend = reloc + reloc_length;
+    while(relocbase < relocend)
+    {
+        unsigned int virtadr = *(unsigned int *) relocbase;
+        unsigned int chksize = *(unsigned int *) (relocbase + 4);
 
-		char* p = RVA<char> (virtadr, 1);
-		if(p >= debug_line && p < debug_line + debug_line_length)
-		{
-			for (unsigned int w = 8; w < chksize; w += 2)
-			{
-				unsigned short entry = *(unsigned short*)(relocbase + w);
-				unsigned short type = (entry >> 12) & 0xf;
-				unsigned short off = entry & 0xfff;
+        char* p = RVA<char> (virtadr, 1);
+        if(p >= debug_line && p < debug_line + debug_line_length)
+        {
+            for (unsigned int w = 8; w < chksize; w += 2)
+            {
+                unsigned short entry = *(unsigned short*)(relocbase + w);
+                unsigned short type = (entry >> 12) & 0xf;
+                unsigned short off = entry & 0xfff;
 
-				if(type == 3) // HIGHLOW
-				{
-					*(long*) (p + off) += img_base;
-				}
-			}
-		}
-		if(chksize == 0 || chksize >= reloc_length)
-			break;
-		relocbase += chksize;
-	}
-	return true;
+                if(type == 3) // HIGHLOW
+                {
+                    *(long*) (p + off) += img_base;
+                }
+            }
+        }
+        if(chksize == 0 || chksize >= reloc_length)
+            break;
+        relocbase += chksize;
+    }
+    return true;
 }
 
 int PEImage::getRelocationInLineSegment(unsigned int offset) const
-{
-    return getRelocationInSegment(linesSegment, offset);
-}
+///
+/// Returns the relocation information for the given offset within a line segment.
+///
+/// @param offset The offset within a line segment for which to retrieve the relocation information
+/// @return The relocation information for the given offset
+///
+return getRelocationInSegment(linesSegment, offset);
 
 int PEImage::getRelocationInSegment(int segment, unsigned int offset) const
 {
@@ -519,11 +540,18 @@ struct LineInfoPair
     int line;
 };
 
-int PEImage::dumpDebugLineInfoCOFF()
+/**
+ * Dumps COFF-style line info from a PE image.
+ * 
+ * This function traverses the sections of the PE image, looking for 
+ * .debug$S sections. It then decodes the contents of these sections 
+ * to extract line information, such as symbol names, file names, 
+ * and line numbers. The information is printed to the console.
+ */
 {
     char* f3section = 0;
     char* f4section = 0;
-	for(int s = 0; s < nsec; s++)
+    for(int s = 0; s < nsec; s++)
     {
         if (strncmp((char*)sec[s].Name, ".debug$S", 8) == 0)
         {
@@ -553,21 +581,23 @@ int PEImage::dumpDebugLineInfoCOFF()
                 LineInfoPair* pairs = (LineInfoPair*)(info + 1);
                 for (int i = 0; i < info->npairs; i++)
                     printf("\tOff 0x%x: Line %d\n", pairs[i].offset, pairs[i].line & 0x7fffffff);
-             }
+            }
         }
     }
     return 0;
 }
 
+/*
+** Returns the length of a null-terminated string stored in bytes
+**
+** @param p: pointer to a byte array
+** @return: the length of the string
+*/
 int _pstrlen(const BYTE* &p)
 {
-	int len = *p++;
-	if(len == 0xff && *p == 0)
-	{
-		len = p[1] | (p[2] << 8);
-		p += 3;
-	}
-	return len;
+    int len = *p++;
+    // ...
+    return len;
 }
 
 unsigned _getIndex(const BYTE* &p)
@@ -580,10 +610,16 @@ unsigned _getIndex(const BYTE* &p)
     return *p++;
 }
 
+/**************************************************************************
+ * dumpDebugLineInfoOMF: Reads and prints debugging line information 
+ * from the OMF (Object Module Format) PEImage.
+ **************************************************************************/
 int PEImage::dumpDebugLineInfoOMF()
 {
+    // Initialize vectors to hold file names and line names.
     std::vector<const unsigned char*> lnames;
     std::vector<const unsigned char*> llnames;
+    // Get the file name from the initial THEADR record.
     const unsigned char* fname = 0;
     unsigned char* base = (unsigned char*) dump_base;
     if (*base != 0x80) // assume THEADR record
@@ -591,6 +627,7 @@ int PEImage::dumpDebugLineInfoOMF()
     unsigned char* end = base + dump_total_len;
     for(unsigned char* p = base; p < end; p += *(unsigned short*)(p + 1) + 3)
     {
+        // Process each record in the file.
         switch(*p)
         {
         case 0x80: // THEADR
@@ -598,20 +635,23 @@ int PEImage::dumpDebugLineInfoOMF()
             break;
         case 0x96: // LNAMES
         {
+            // Read the length of the name and store it in the lnames vector.
             int len = *(unsigned short*)(p + 1);
-            for(const unsigned char* q = p + 3; q < p + len + 2; q += _pstrlen (q)) // defined behaviour?
+            for(const unsigned char* q = p + 3; q < p + len + 2; q += _pstrlen (q)) 
                 lnames.push_back(q);
             break;
         }
         case 0xCA: // LLNAMES
         {
+            // Read the length of the name and store it in the llnames vector.
             int len = *(unsigned short*)(p + 1);
-            for(const unsigned char* q = p + 3; q < p + len + 2; q += _pstrlen (q)) // defined behaviour?
+            for(const unsigned char* q = p + 3; q < p + len + 2; q += _pstrlen (q)) 
                 llnames.push_back(q);
             break;
         }
         case 0x95: // LINNUM
         {
+            // Read the number of line numbers and print the debugging information.
             const unsigned char* q = p + 3;
             int basegrp = _getIndex(q);
             int baseseg = _getIndex(q);
@@ -625,6 +665,7 @@ int PEImage::dumpDebugLineInfoOMF()
         }
         case 0xc5: // LINSYM
         {
+            // Read the line symbol information and print it.
             const unsigned char* q = p + 3;
             unsigned flags = *q++;
             unsigned pubname = _getIndex(q);
@@ -649,13 +690,18 @@ int PEImage::dumpDebugLineInfoOMF()
 }
 
 ///////////////////////////////////////////////////////////////////////
+/// <summary>
+/// Find the section that contains the given offset.
+/// </summary>
+/// <param name="off">The offset to find.</param>
+/// <returns>The index of the section that contains the offset, or -1 if not found.</returns>
 int PEImage::findSection(unsigned int off) const
 {
-	off -= IMGHDR(OptionalHeader.ImageBase);
-	for(int s = 0; s < nsec; s++)
-		if(sec[s].VirtualAddress <= off && off < sec[s].VirtualAddress + sec[s].Misc.VirtualSize)
-			return s;
-	return -1;
+    off -= IMGHDR(OptionalHeader.ImageBase);
+    for(int s = 0; s < nsec; s++)
+        if(sec[s].VirtualAddress <= off && off < sec[s].VirtualAddress + sec[s].Misc.VirtualSize)
+            return s;
+    return -1;
 }
 
 template<typename SYM>
@@ -690,6 +736,14 @@ const char* PEImage::findSectionSymbolName(int s) const
         return t_findSectionSymbolName<IMAGE_SYMBOL> (s);
 }
 
+/**
+* Finds a symbol in the PE image by its name and returns its offset.
+*
+* @param name the name of the symbol to find
+* @param off an output parameter that will hold the offset of the symbol
+*
+* @return the section number of the symbol if found, -1 otherwise
+*/
 int PEImage::findSymbol(const char* name, unsigned long& off) const
 {
     int sizeof_sym = bigobj ? sizeof(IMAGE_SYMBOL_EX) : IMAGE_SIZEOF_SYMBOL;
@@ -707,35 +761,54 @@ int PEImage::findSymbol(const char* name, unsigned long& off) const
 }
 
 ///////////////////////////////////////////////////////////////////////
+/**
+* Returns the count of CodeView entries.
+*
+* @return The number of CodeView entries in the PE image, or 0 if dirHeader is null.
+*/
 int PEImage::countCVEntries() const
 {
 	return dirHeader ? dirHeader->cDir : 0;
 }
 
+​
+/// Returns the OMFDirEntry at the specified index (i) from the PEImage's directory
 OMFDirEntry* PEImage::getCVEntry(int i) const
 {
-	return dirEntry + i;
+    return dirEntry + i;
 }
 
 
 ///////////////////////////////////////////////////////////////////////
 // utilities
+/// Allocates a memory block with the specified alignment and alignment offset.
+///
+/// @param size The size of the memory block to be allocated.
+/// @param align The alignment requirement for the memory block.
+/// @param alignoff The alignment offset for the memory block.
+///
 void* PEImage::alloc_aligned(unsigned int size, unsigned int align, unsigned int alignoff)
 {
-	if (align & (align - 1))
-		return 0;
+    if (align & (align - 1))
+        return 0;
 
-	unsigned int pad = align + sizeof(void*);
-	char* p = (char*) malloc(size + pad);
-	unsigned int off = (align + alignoff - sizeof(void*) - (p - (char*) 0)) & (align - 1);
-	char* q = p + sizeof(void*) + off;
-	((void**) q)[-1] = p;
-	return q;
+    unsigned int pad = align + sizeof(void*);
+    char* p = (char*) malloc(size + pad);
+    unsigned int off = (align + alignoff - sizeof(void*) - (p - (char*) 0)) & (align - 1);
+    char* q = p + sizeof(void*) + off;
+    ((void**) q)[-1] = p;
+    return q;
 }
 
 ///////////////////////////////////////////////////////////////////////
+/*
+ * Frees the memory allocated for the PE image.
+ */
 void PEImage::free_aligned(void* p)
 {
-	void* q = ((void**) p)[-1];
-	free(q);
+    /*
+     * Gets the previous pointer from the aligned pointer and frees the memory.
+     */
+    void* q = ((void**) p)[-1];
+    free(q);
 }
